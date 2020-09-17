@@ -1,9 +1,11 @@
-import os
 from scipy.sparse.linalg import svds
 from scipy.sparse import csr_matrix
-import matplotlib.pyplot as plt
 from get_data import DataGetter
 from modelmixin import ModelMixin
+
+# used for examples
+import pprint
+from searchutils.nns import build_index, NNS
 
 
 class SVD(ModelMixin):
@@ -51,6 +53,7 @@ class SVD(ModelMixin):
 
 
 if __name__ == "__main__":
+    pp = pprint.PrettyPrinter(indent=4)
     d = DataGetter()
     df = d.get_ml_data()
     df = d.assign_indices(df)

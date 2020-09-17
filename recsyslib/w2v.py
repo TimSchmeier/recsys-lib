@@ -1,4 +1,3 @@
-import pandas as pd
 import tensorflow as tf
 from tensorflow.keras.preprocessing.sequence import (
     make_sampling_table,
@@ -6,10 +5,8 @@ from tensorflow.keras.preprocessing.sequence import (
 )
 from tensorflow.keras.preprocessing.text import (
     Tokenizer,
-    text_to_word_sequence,
 )
 from tensorflow.keras.losses import binary_crossentropy
-from random import shuffle
 from tensorflow.keras.utils import Sequence
 import math
 import numpy as np
@@ -81,15 +78,15 @@ class SkipGramDataGenerator(Sequence):
     def skipgramgen(self, corpus):
         pairs, labels = [], []
         for doc in corpus:
-            p, l = skipgrams(
+            pair, label = skipgrams(
                 doc,
                 self.vocabsize,
                 window_size=self.window_size,
                 negative_samples=self.negative_samples,
                 sampling_table=self.sampling_table,
             )
-            pairs.extend(p)
-            labels.extend(l)
+            pairs.extend(pair)
+            labels.extend(label)
         return np.asarray(pairs), np.asarray(labels)
 
 
@@ -118,10 +115,10 @@ if __name__ == "__main__":
     """
     opt = tf.keras.optimizers.Adam(lr=0.001)
     for minibatch in range(len(sgdg)):
-	x, y = sgdg[minibatch]
-	with tf.GradientTape() as tape:
+        x, y = sgdg[minibatch]
+        with tf.GradientTape() as tape:
             ypred = m(x)
             loss = tf.reduce_mean(binary_crossentropy(y, ypred))
-	grads = tape.gradient(loss, m.trainable_variables)
-	opt.apply_gradients(zip(grads, m.trainable_variables))
+        grads = tape.gradient(loss, m.trainable_variables)
+        opt.apply_gradients(zip(grads, m.trainable_variables))
     """

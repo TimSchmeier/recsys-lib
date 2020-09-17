@@ -1,10 +1,7 @@
-import os
-import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 from get_data import DataGetter
 from modelmixin import ModelMixin
-from scipy.sparse import csr_matrix, eye, diags
+from scipy.sparse import csr_matrix
 from tqdm import tqdm
 
 
@@ -32,7 +29,7 @@ class BVD(ModelMixin):
         )
         self.logger.info("begin training")
         for it in tqdm(range(epochs)):
-            self.call(R_ui)
+            self.call(Z)
             self.logging.info(f"epoch {it} complete")
 
     def call(self, inputs):

@@ -2,9 +2,7 @@ import os
 import pandas as pd
 import numpy as np
 from zipfile import ZipFile
-import tensorflow as tf
 from tensorflow import keras
-from tensorflow.keras import layers
 from scipy.sparse import csr_matrix
 
 
@@ -38,10 +36,6 @@ class DataGetter:
 
         movielens_zipped_file = keras.utils.get_file(
             self.filename, movielens_data_file_url, extract=False
-        )
-
-        keras_datasets_path = os.path.dirname(
-            os.path.abspath(movielens_zipped_file)
         )
 
         # Only extract the data the first time the script is run.

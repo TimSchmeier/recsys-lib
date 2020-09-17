@@ -1,7 +1,4 @@
-import os
-import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 from get_data import DataGetter
 from modelmixin import ModelMixin
 from scipy.sparse import csr_matrix, eye, diags

@@ -1,6 +1,3 @@
-import os
-import pandas as pd
-import numpy as np
 import tensorflow as tf
 from tensorflow.keras import layers
 from get_data import DataGetter
@@ -12,8 +9,10 @@ class NCS(MatrixFactorization):
         super().__init__(num_users, num_items, biases=False, **kwargs)
         self.num_dense = num_dense
         self.dense_layers = [
-            layers.Dense((self.latent_dim * 2) / (l ** 2), activation="relu")
-            for l in range(1, num_dense)
+            layers.Dense(
+                (self.latent_dim * 2) / (layer ** 2), activation="relu"
+            )
+            for layer in range(1, num_dense)
         ]
         self.output_layer = layers.Dense(1)
 

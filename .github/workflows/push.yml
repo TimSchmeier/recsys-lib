@@ -1,4 +1,4 @@
-name: Test CDP
+name: Test recsyslib
 
 on: [push]
 
@@ -38,7 +38,7 @@ jobs:
         echo "::set-env name=TEST::TEST"
 
     - name: Pep Lint
-      run: flake8 ds_cdp/
+      run: flake8 recsyslib/
 
     - name: Test code
       run: python -m pytest --cov=recsyslib tests/ --junitxml=junit/test-results-${{ matrix.python-version }}.xml

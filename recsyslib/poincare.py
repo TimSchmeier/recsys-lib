@@ -1,4 +1,3 @@
-import pandas as pd
 import tensorflow as tf
 from tensorflow.keras.preprocessing.sequence import (
     make_sampling_table,
@@ -6,10 +5,7 @@ from tensorflow.keras.preprocessing.sequence import (
 )
 from tensorflow.keras.preprocessing.text import (
     Tokenizer,
-    text_to_word_sequence,
 )
-from tensorflow.keras.losses import binary_crossentropy
-from random import shuffle
 from tensorflow.keras.utils import Sequence
 import math
 import numpy as np
@@ -76,7 +72,7 @@ class PoincareEmbedding(ModelMixin, tf.keras.Model):
     def train_step(self, inputs):
         with tf.GradientTape() as tape:
             dist_uv, dist_uvprimes = self.call(inputs)
-            l = self.loss(dist_uv, dist_uvprimes)
+            loss = self.loss(dist_uv, dist_uvprimes)
         grads = tape.gradient(loss, self.trainable_variables)
         self.optimizer.apply_gradients(zip(grads, self.trainable_variables))
         self.theta = self.project(self.theta)
@@ -113,23 +109,22 @@ class SkipGramDataGenerator(Sequence):
     def skipgramgen(self, corpus):
         pairs, labels = [], []
         for doc in corpus:
-            p, l = skipgrams(
+            pair, label = skipgrams(
                 doc,
                 self.vocabsize,
                 window_size=self.window_size,
                 negative_samples=self.negative_samples,
                 sampling_table=self.sampling_table,
             )
-            pairs.extend(p)
-            labels.extend(l)
+            pairs.extend(pair)
+            labels.extend(label)
         return np.asarray(pairs), np.asarray(labels)
 
 
 if __name__ == "__main__":
     d = DataGetter()
-    df = d.get_ml_data()
-    NMOVIES = len(df["movieId"].unique())
-    sequences = d.get_item_sequences(df)
+    NMOVIES = len(d.df["movieId"].unique())
+    sequences = d.get_item_sequences()
 
     tokenizer = Tokenizer(NMOVIES, oov_token="OOV")
     tokenizer.fit_on_texts(sequences)

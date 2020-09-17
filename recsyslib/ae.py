@@ -1,5 +1,3 @@
-import os
-import pandas as pd
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras import layers
@@ -12,10 +10,10 @@ class Encoder(ModelMixin, tf.keras.Model):
     def __init__(self, num_users, num_items, num_dense, **kwargs):
         super().__init__(num_users, num_items, **kwargs)
         self.dense_layers = []
-        for l in range(num_dense, 0, -1):
+        for layer in range(num_dense, 0, -1):
             self.dense_layers.append(
                 layers.Dense(
-                    self.latent_dim * (l * 2),
+                    self.latent_dim * (layer * 2),
                     activation="relu",
                     kernel_initializer=tf.keras.initializers.TruncatedNormal(
                         mean=0.0, stddev=0.05
@@ -36,10 +34,10 @@ class Decoder(ModelMixin, tf.keras.Model):
     def __init__(self, num_users, num_items, num_dense, **kwargs):
         super().__init__(num_users, num_items, **kwargs)
         self.dense_layers = []
-        for l in range(1, num_dense + 1):
+        for layer in range(1, num_dense + 1):
             self.dense_layers.append(
                 layers.Dense(
-                    self.latent_dim * (l * 2),
+                    self.latent_dim * (layer * 2),
                     activation="relu",
                     kernel_initializer=tf.keras.initializers.TruncatedNormal(
                         mean=0.0, stddev=0.05

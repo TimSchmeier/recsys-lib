@@ -1,25 +1,22 @@
-import os
-import pandas as pd
-import numpy as np
 import tensorflow as tf
 from tensorflow.keras import layers
 from get_data import DataGetter
 from modelmixin import ModelMixin
 
 
-class MatrixFactorization(ModelMixin, keras.Model):
+class MatrixFactorization(ModelMixin, tf.keras.Model):
     def __init__(self, num_users, num_items, biases=True, **kwargs):
         super().__init__(num_users, num_items, **kwargs)
         self.use_biases = biases
         self.user_embedding = layers.Embedding(
             self.num_users,
             self.latent_dim,
-            embeddings_regularizer=keras.regularizers.l2(1e-6),
+            embeddings_regularizer=tf.keras.regularizers.l2(1e-6),
         )
         self.item_embedding = layers.Embedding(
             self.num_items,
             self.latent_dim,
-            embeddings_regularizer=keras.regularizers.l2(1e-6),
+            embeddings_regularizer=tf.keras.regularizers.l2(1e-6),
         )
         if self.use_biases:
             self.user_bias = layers.Embedding(num_users, 1)

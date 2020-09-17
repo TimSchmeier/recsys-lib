@@ -1,12 +1,9 @@
-import os
-import pandas as pd
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras import layers
 from get_data import DataGetter
 from modelmixin import ModelMixin
 from scipy.sparse import csr_matrix
-import tensorflow.keras.backend as K
 from ae import Decoder
 from callbacks import AnnealKLloss
 
@@ -27,10 +24,10 @@ class VAEncoder(ModelMixin, tf.keras.Model):
     def __init__(self, num_users, num_items, num_dense, **kwargs):
         super().__init__(num_users, num_items, **kwargs)
         self.dense_layers = []
-        for l in range(num_dense, 0, -1):
+        for layer in range(num_dense, 0, -1):
             self.dense_layers.append(
                 layers.Dense(
-                    self.latent_dim * (l * 2),
+                    self.latent_dim * (layer * 2),
                     activation="relu",
                     kernel_initializer=tf.keras.initializers.TruncatedNormal(
                         mean=0.0, stddev=0.05
@@ -101,8 +98,8 @@ if __name__ == "__main__":
     d = DataGetter()
     # only keep good ratings
     d.df = d.df[d.df["rating"] >= 3]
-    movieId_to_idx = d.get_item_idx_map(df)
-    userId_to_idx = d.get_user_idx_map(df)
+    movieId_to_idx = d.get_item_idx_map()
+    userId_to_idx = d.get_user_idx_map()
 
     num_users = len(userId_to_idx)
     num_movies = len(movieId_to_idx)
