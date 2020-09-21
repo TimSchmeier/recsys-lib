@@ -14,10 +14,11 @@ class ModelMixin:
         self.logger = logging.getLogger(self.name)
         self.logger.setLevel(logging.INFO)
 
-        handler = logging.StreamHandler(sys.stdout)
-        handler.setLevel(logging.INFO)
-        formatter = logging.Formatter(
-            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-        )
-        handler.setFormatter(formatter)
-        self.logger.addHandler(handler)
+        if not self.logger.hasHandlers():
+            handler = logging.StreamHandler(sys.stdout)
+            handler.setLevel(logging.INFO)
+            formatter = logging.Formatter(
+                "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+            )
+            handler.setFormatter(formatter)
+            self.logger.addHandler(handler)

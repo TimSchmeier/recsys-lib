@@ -9,7 +9,7 @@ setup(
     version="0.0.1",
     use_scm_version=True,
     url="https://github.com/TimSchmeier/recsyslib",
-    packages=find_packages(exclude=("tests")),
+    packages=find_packages(exclude=("tests", "papers", "notebooks")),
     include_package_data=True,
     setup_requires=["setuptools_scm"],
     tests_require=["pytest"],

@@ -27,8 +27,8 @@ class VAEncoder(ModelMixin, tf.keras.Model):
         for layer in range(num_dense, 0, -1):
             self.dense_layers.append(
                 layers.Dense(
-                    self.latent_dim * (layer * 2),
-                    activation="relu",
+                    600,
+                    activation="tanh",
                     kernel_initializer=tf.keras.initializers.TruncatedNormal(
                         mean=0.0, stddev=0.05
                     ),
@@ -47,19 +47,57 @@ class VAEncoder(ModelMixin, tf.keras.Model):
         return z_mean, z_log_var, z
 
 
+class VADecoder(ModelMixin, tf.keras.Model):
+    def __init__(self, num_users, num_items, num_dense, **kwargs):
+        super().__init__(num_users, num_items, **kwargs)
+        self.dense_layers = []
+        for layer in range(1, num_dense + 1):
+            self.dense_layers.append(
+                layers.Dense(
+                    600,
+                    activation="tanh",
+                    kernel_initializer=tf.keras.initializers.TruncatedNormal(
+                        mean=0.0, stddev=0.05
+                    ),
+                )
+            )
+        self.dense_out = layers.Dense(
+            self.num_items, activation="sigmoid", name="out"
+        )
+
+    @tf.function
+    def call(self, inputs):
+        x = inputs
+        for layer in self.dense_layers:
+            x = layer(x)
+        recon_x = self.dense_out(x)
+        return recon_x
+
+
 class VAE(ModelMixin, tf.keras.Model):
     def __init__(
         self,
         num_users,
         num_items,
-        num_dense=4,
+        num_dense=2,
+        latent_dim=200,
         kl_weight=tf.Variable(0.0, dtype=tf.float32, trainable=False),
         **kwargs
     ):
+        """Implimentation of:
+            Liang, D. et.  al. 2018. Variational Autoencoders for Collaborative Filtering.
+             WWW '18. Pages 689–698 https://doi.org/10.1145/3178876.3186150
+
+        Args:
+            num_users (int): number of users
+            num_items (int): number of items
+            num_dense (int): number of dense layers in each of the encoder and decoder.
+            **kwargs
+        """
         super().__init__(num_users, num_items, **kwargs)
         self.kl_weight = kl_weight
         self.enc = VAEncoder(num_users, num_items, num_dense, name="enc")
-        self.dec = Decoder(num_users, num_items, num_dense, name="dec")
+        self.dec = VADecoder(num_users, num_items, num_dense, name="dec")
 
     def call(self, inputs):
         z_mean, z_log_var, z = self.enc(inputs)
@@ -92,32 +130,3 @@ class VAE(ModelMixin, tf.keras.Model):
             "kl_weight": self.kl_weight,
             "kl_loss_weighted": kl_loss_weighted,
         }
-
-
-if __name__ == "__main__":
-    d = DataGetter()
-    # only keep good ratings
-    d.df = d.df[d.df["rating"] >= 3]
-    movieId_to_idx = d.get_item_idx_map()
-    userId_to_idx = d.get_user_idx_map()
-
-    num_users = len(userId_to_idx)
-    num_movies = len(movieId_to_idx)
-
-    user_by_item = csr_matrix(
-        (np.ones(d.df.shape[0]), (d.df["user_idx"], d.df["movie_idx"])),
-        shape=(num_users, num_movies),
-    )
-
-    vae = VAE(num_users, num_movies, name="vae")
-
-    vae.compile(optimizer=tf.keras.optimizers.Adam(lr=1e-4))
-
-    num_epochs = 5
-    history = vae.fit(
-        user_by_item[:128, :],
-        batch_size=32,
-        epochs=num_epochs,
-        verbose=1,
-        callbacks=[AnnealKLloss(num_epochs)],
-    )

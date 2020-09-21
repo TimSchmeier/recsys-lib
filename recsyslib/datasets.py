@@ -4,14 +4,16 @@ import numpy as np
 from zipfile import ZipFile
 from tensorflow import keras
 from scipy.sparse import csr_matrix
+import itertools
 
 
-DATAFOLDER = "/Users/timschmeier/recsys-lib/data"
+DATAFOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+
 NUM_RATINGS = "25m"
 FILENAME = f"ml-{NUM_RATINGS}.zip"
 
 
-class DataGetter:
+class MovieLensData:
     def __init__(
         self,
         data_folder=DATAFOLDER,
@@ -78,6 +80,33 @@ class DataGetter:
         df = df.sample(frac=1, random_state=49)
         return df
 
+    def downsample_data(self, num_users=100, num_items=100):
+        users = (
+            self.df.groupby("userId")
+            .size()
+            .reset_index(name="counts")
+            .sort_values(["counts"], ascending=False)
+            .head(num_users)
+        )["userId"].tolist()
+        self.df = self.df[self.df["userId"].isin(users)]
+
+        movies = (
+            self.df.groupby("movieId")
+            .size()
+            .reset_index(name="counts")
+            .sort_values(["counts"], ascending=False)
+            .head(num_items)
+        )["movieId"].tolist()
+
+        if len(movies) < num_items:
+            print(f"using on {len(movies)} for this number of users")
+            num_items = len(movies)
+
+        self.df = self.df[self.df["movieId"].isin(movies)]
+        self.num_users = num_users
+        self.num_items = num_items
+        self.df = self._assign_indices(self.df)
+
     def _get_map(self, key, val):
         return {
             k: v
@@ -134,16 +163,32 @@ class DataGetter:
             X, y = self.get_user_item_rating_tuples(scale, split)
             return csr_matrix((y, X), shape=(self.num_users, self.num_items))
 
-    def get_genre_movie_tuples(self):
-        raise NotImplementedError("create me!")
+    def get_genre_movie_data(self):
+        movies = self.df[
+            ["movieId", "movie_idx", "title", "genres"]
+        ].drop_duplicates()
+        movies["genres"] = movies["genres"].str.split("|")
+        max_movie_idx = np.max(movies["movie_idx"].values)
 
+        all_genres = set(itertools.chain.from_iterable(movies["genres"]))
+        num_genres = len(all_genres)
+        genre_map = {
+            g: i + max_movie_idx for i, g in enumerate(list(all_genres), 1)
+        }
 
-if __name__ == "__main__":
+        def other_labels(g, all_genre=all_genres, gmap=genre_map):
+            return [genre_map[g] for g in list(all_genres.difference(set(g)))]
 
-    d = DataGetter()
-    itemId_to_idx = d.get_item_idx_map()
-    userId_to_idx = d.get_user_idx_map()
-    itemIdx_to_title = d.get_item_idx_to_title()
-    ui_train, ui_test, r_train, r_test = d.get_user_item_rating_tuples(True)
-    seq = d.get_item_sequences()
-    uim = d.get_user_item_rating_matrix(split=False)
+        movies["negative_genre_idx"] = movies["genres"].apply(other_labels)
+        movies = movies.explode("genres")
+        movies["genre_idx"] = movies["genres"].map(genre_map)
+
+        def sample_negatives(negative_genre_idx):
+            n_neg_genres = min(len(negative_genre_idx), 10)
+            return np.random.choice(negative_genre_idx, n_neg_genres)
+
+        movies["negative_genre_idx"] = movies["negative_genre_idx"].apply(
+            sample_negatives
+        )
+        movies["year"] = movies["title"].str.extract("([0-9]{4})")
+        return movies

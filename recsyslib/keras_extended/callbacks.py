@@ -4,7 +4,7 @@ import tensorflow.keras.backend as K
 
 
 class BurnIn(tf.keras.callbacks.Callback):
-    def __init__(self, burnin_lr, burn_epochs=10):
+    def __init__(self, burnin_lr=None, burn_epochs=10):
         super().__init__()
         self.burn_epochs = burn_epochs
         self.burnin_lr = burnin_lr
@@ -17,12 +17,14 @@ class BurnIn(tf.keras.callbacks.Callback):
         # set learning rate from optimizer arg
         if epoch == 0:
             self.lr = lr
+            if not self.burnin_lr:
+                self.burnin_lr = self.lr / 10.0
         if epoch < self.burn_epochs:
             lr = self.burnin_lr
+            self.model.logger.info(f"Burn In Epoch {epoch}'s lr is {lr}")
         else:
             lr = self.lr
         K.set_value(self.model.optimizer.lr, lr)
-        self.model.logger.info(f"Epoch {epoch}'s lr is {lr}")
 
 
 class AnnealKLloss(tf.keras.callbacks.Callback):
@@ -90,7 +92,7 @@ class EarlyStoppingAtMinLoss(tf.keras.callbacks.Callback):
             )
 
 
-class CustomLearningRateScheduler(tf.keras.callbacks.Callback):
+class DecayLR(tf.keras.callbacks.Callback):
     """Learning rate scheduler which sets the learning rate according to schedule.
 
     Arguments:
@@ -99,9 +101,14 @@ class CustomLearningRateScheduler(tf.keras.callbacks.Callback):
             as inputs and returns a new learning rate as output (float).
     """
 
-    def __init__(self, schedule):
+    def __init__(self, lr=None, decay_rate=0.96, decay_steps=20):
         super().__init__()
-        self.schedule = schedule
+        self.lr = lr
+        self.decay_rate = decay_rate
+        self.decay_steps = decay_steps
+
+    def decay(self, epoch):
+        return self.lr * self.decay_rate ** (epoch / self.decay_steps)
 
     def on_epoch_begin(self, epoch, logs=None):
         if not hasattr(self.model.optimizer, "lr"):
@@ -110,27 +117,12 @@ class CustomLearningRateScheduler(tf.keras.callbacks.Callback):
         lr = float(
             tf.keras.backend.get_value(self.model.optimizer.learning_rate)
         )
+        if epoch == 0 and self.lr is None:
+            self.lr = lr
         # Call schedule function to get the scheduled learning rate.
-        scheduled_lr = self.schedule(epoch, lr)
+        scheduled_lr = self.decay(epoch)
         # Set the value back to the optimizer before this epoch starts
         tf.keras.backend.set_value(self.model.optimizer.lr, scheduled_lr)
-        print("\nEpoch %05d: Learning rate is %6.4f." % (epoch, scheduled_lr))
-
-
-LR_SCHEDULE = [
-    # (epoch to start, learning rate) tuples
-    (3, 0.05),
-    (6, 0.01),
-    (9, 0.005),
-    (12, 0.001),
-]
-
-
-def lr_schedule(epoch, lr):
-    """Helper function to retrieve the scheduled learning rate based on epoch."""
-    if epoch < LR_SCHEDULE[0][0] or epoch > LR_SCHEDULE[-1][0]:
-        return lr
-    for i in range(len(LR_SCHEDULE)):
-        if epoch == LR_SCHEDULE[i][0]:
-            return LR_SCHEDULE[i][1]
-    return lr
+        self.model.logger.info(
+            f"Epoch {epoch}: Learning rate is {scheduled_lr}."
+        )

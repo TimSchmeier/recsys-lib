@@ -1,11 +1,22 @@
 import tensorflow as tf
 from tensorflow.keras import layers
-from get_data import DataGetter
-from mf_sgd import MatrixFactorization
+from mf import MatrixFactorization
 
 
-class NCS(MatrixFactorization):
+class NeuMF(MatrixFactorization):
     def __init__(self, num_users, num_items, num_dense=3, **kwargs):
+        """
+        Implimentation of:
+            He, X. et. al. 2017. Neural Collaborative Filtering.
+            WWW '17: Pages 173–182 https://doi.org/10.1145/3038912.3052569
+
+        Args:
+            num_users (int): number of users
+            num_items (int): number of items
+            num_dense (int): depth of MLP
+            **kwargs
+
+        """
         super().__init__(num_users, num_items, biases=False, **kwargs)
         self.num_dense = num_dense
         self.dense_layers = [
@@ -14,6 +25,7 @@ class NCS(MatrixFactorization):
             )
             for layer in range(1, num_dense)
         ]
+        self.dropout_layers = [layers.Dropout(rate=0.4) for layer in num_dense]
         self.output_layer = layers.Dense(1)
 
     @tf.function
@@ -22,36 +34,8 @@ class NCS(MatrixFactorization):
         user_vector = self.user_embedding(user)
         item_vector = self.item_embedding(item)
         x = tf.concat([user_vector, item_vector], axis=1)
-        for layer in self.dense_layers:
-            x = layer(x)
+        for dense, dropout in zip(self.dense_layers, self.dropout_layers):
+            x = dense(x)
+            x = dropout(x)
         logit = self.output_layer(x)
         return tf.nn.sigmoid(logit)
-
-
-if __name__ == "__main__":
-    d = DataGetter()
-    df = d.get_ml_data()
-    df = d.assign_indices(df)
-    df = d.scale_rating(df)
-    movieId_to_idx = d.get_item_idx_map(df)
-    userId_to_idx = d.get_user_idx_map(df)
-    (X_train, X_test, y_train, y_test) = d.split_data(df)
-
-    num_users = len(userId_to_idx)
-    num_movies = len(movieId_to_idx)
-
-    ncs = NCS(num_users, num_movies, name="ncs")
-
-    ncs.compile(
-        loss=tf.keras.losses.BinaryCrossentropy(),
-        optimizer=tf.keras.optimizers.Adam(lr=0.001),
-    )
-
-    history = ncs.fit(
-        x=X_train,
-        y=y_train,
-        batch_size=32,
-        epochs=5,
-        verbose=1,
-        validation_data=(X_test, y_test),
-    )

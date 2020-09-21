@@ -10,8 +10,7 @@ from tensorflow.keras.losses import binary_crossentropy
 from tensorflow.keras.utils import Sequence
 import math
 import numpy as np
-from get_data import DataGetter
-from modelmixin import ModelMixin
+from recsyslib.modelmixin import ModelMixin
 
 
 WINDOW_SIZE = 2
@@ -21,6 +20,13 @@ BATCH_SIZE = 32
 
 class W2V(ModelMixin, tf.keras.Model):
     def __init__(self, num_items, **kwargs):
+        """Implimentation of:
+            Mikolov, Tomas; et al. (2013). "Efficient Estimation of Word Representations in Vector Space". arXiv:1301.3781
+
+        Args:
+            num_items (int): total number of sequence items to embed.
+            **kwargs
+        """
         super().__init__(num_users=None, num_items=num_items, **kwargs)
         self.hidden = tf.keras.layers.Embedding(
             self.num_items, self.latent_dim
@@ -29,7 +35,13 @@ class W2V(ModelMixin, tf.keras.Model):
             self.num_items, self.latent_dim
         )
 
+    @tf.function
     def call(self, inputs):
+        """Embed word pairs.
+
+        Args:
+            inputs (tuple): (word, context)
+        """
         word, context = inputs
         w = self.hidden(word)
         c = self.context(context)
@@ -88,37 +100,3 @@ class SkipGramDataGenerator(Sequence):
             pairs.extend(pair)
             labels.extend(label)
         return np.asarray(pairs), np.asarray(labels)
-
-
-if __name__ == "__main__":
-    d = DataGetter()
-    df = d.get_ml_data()
-    NMOVIES = len(df["movieId"].unique())
-    sequences = d.get_item_sequences(df)
-
-    tokenizer = Tokenizer(NMOVIES, oov_token="OOV")
-    tokenizer.fit_on_texts(sequences)
-    word_index = tokenizer.word_index
-    index_word = {v: k for k, v in word_index.items()}
-    train_sequences = tokenizer.texts_to_sequences(sequences)
-    sampling_table = make_sampling_table(NMOVIES)
-    sgdg = SkipGramDataGenerator(
-        train_sequences, NMOVIES, sampling_table=sampling_table
-    )
-
-    m = W2V(NMOVIES, name="w2v")
-
-    m.compile(optimizer=tf.keras.optimizers.Adam(lr=0.001), metrics=["AUC"])
-
-    m.fit(sgdg, epochs=1)
-
-    """
-    opt = tf.keras.optimizers.Adam(lr=0.001)
-    for minibatch in range(len(sgdg)):
-        x, y = sgdg[minibatch]
-        with tf.GradientTape() as tape:
-            ypred = m(x)
-            loss = tf.reduce_mean(binary_crossentropy(y, ypred))
-        grads = tape.gradient(loss, m.trainable_variables)
-        opt.apply_gradients(zip(grads, m.trainable_variables))
-    """
