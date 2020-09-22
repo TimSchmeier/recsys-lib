@@ -1,17 +1,5 @@
 import tensorflow as tf
-from tensorflow.keras.preprocessing.sequence import (
-    make_sampling_table,
-    skipgrams,
-)
-from tensorflow.keras.preprocessing.text import (
-    Tokenizer,
-)
-from tensorflow.keras.utils import Sequence
-import math
-import numpy as np
 from recsyslib.modelmixin import ModelMixin
-from recsyslib.keras_extended.optimizers import LorentzSGD
-from recsyslib.keras_extended.callbacks import BurnIn
 from recsyslib.keras_extended.initializers import LorentzInitializer
 
 

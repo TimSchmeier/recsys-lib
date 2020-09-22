@@ -1,10 +1,6 @@
 import tensorflow as tf
 from tensorflow.keras.preprocessing.sequence import (
-    make_sampling_table,
     skipgrams,
-)
-from tensorflow.keras.preprocessing.text import (
-    Tokenizer,
 )
 from tensorflow.keras.losses import binary_crossentropy
 from tensorflow.keras.utils import Sequence
@@ -21,7 +17,8 @@ BATCH_SIZE = 32
 class W2V(ModelMixin, tf.keras.Model):
     def __init__(self, num_items, **kwargs):
         """Implimentation of:
-            Mikolov, Tomas; et al. (2013). "Efficient Estimation of Word Representations in Vector Space". arXiv:1301.3781
+            Mikolov, T., et al. (2013). "Efficient Estimation of Word Representations in Vector Space".
+            arXiv:1301.3781
 
         Args:
             num_items (int): total number of sequence items to embed.

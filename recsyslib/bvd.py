@@ -1,4 +1,3 @@
-import numpy as np
 from modelmixin import ModelMixin
 from tqdm import tqdm
 import tensorflow as tf

@@ -1,6 +1,4 @@
-import tensorflow.keras.backend as K
 import tensorflow as tf
-from tensorflow.python.keras.optimizer_v2.optimizer_v2 import OptimizerV2
 from tensorflow.python.ops import (
     array_ops,
     control_flow_ops,
@@ -44,7 +42,7 @@ class PoincareSGD(tf.keras.optimizers.SGD):
     def _resource_apply_sparse(self, grad, var, apply_state=None):
         # intercept and scale gradient
         var_dtype = var.dtype.base_dtype
-        lr = self._get_hyper("learning", var_dtype)
+        lr = self._get_hyper("learning_rate", var_dtype)
         grad = self._euclid_to_riemann_grad(grad, var)
         var_t = self.proj(var - lr * grad)
         var_update = state_ops.assign(
@@ -65,12 +63,12 @@ class LorentzSGD(tf.keras.optimizers.SGD):
         dotL += math_ops.sum(p[:, 1:], axis=1)
         return dotL
 
-    def exp_map(v, x):
+    def exp_map(self, v, x):
         # eq (9), v is the gradient
-        vnorm = math_ops.sqrt(lorentz_scalar_product(v, v))
+        vnorm = math_ops.sqrt(self.lorentz_scalar_product(v, v))
         return math_ops.cosh(vnorm) * x + math_ops.sinh(vnorm) * v / vnorm
 
-    def proj(u, x):
+    def proj(self, u, x):
         # eq (10.5), u is scaled gradient here
         return u + self.lorentz_scalar_product(x, u) * x
 
@@ -81,7 +79,7 @@ class LorentzSGD(tf.keras.optimizers.SGD):
         gl[0, 0] = -1
         h = gl * grad
         gradfvar = self.proj(h, var)
-        var_t = self.exp_map(-self.learning_rate * gradfvar, var)
+        var_t = self.exp_map(-lr * gradfvar, var)
         var_update = state_ops.assign(
             var, var_t, use_locking=self._use_locking
         )

@@ -171,7 +171,6 @@ class MovieLensData:
         max_movie_idx = np.max(movies["movie_idx"].values)
 
         all_genres = set(itertools.chain.from_iterable(movies["genres"]))
-        num_genres = len(all_genres)
         genre_map = {
             g: i + max_movie_idx for i, g in enumerate(list(all_genres), 1)
         }

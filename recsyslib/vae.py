@@ -1,11 +1,6 @@
-import numpy as np
 import tensorflow as tf
 from tensorflow.keras import layers
-from get_data import DataGetter
 from modelmixin import ModelMixin
-from scipy.sparse import csr_matrix
-from ae import Decoder
-from callbacks import AnnealKLloss
 
 
 class Sampling(layers.Layer):

@@ -1,6 +1,5 @@
 import numpy as np
 from recsyslib.modelmixin import ModelMixin
-from scipy.sparse import csr_matrix
 from tqdm import tqdm
 import tensorflow as tf
 
