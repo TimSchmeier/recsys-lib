@@ -12,6 +12,7 @@ import numpy as np
 from recsyslib.modelmixin import ModelMixin
 from recsyslib.keras_extended.optimizers import PoincareSGD
 from recsyslib.keras_extended.callbacks import BurnIn
+import tensorflow.keras.backend as K
 
 
 WINDOW_SIZE = 2
@@ -31,6 +32,8 @@ class PoincareEmbedding(ModelMixin, tf.keras.Model):
         """
         super().__init__(num_users=None, num_items=num_items, **kwargs)
         self.EPS = 1e-5
+        self.r = K.variable(0.1)
+        self.t = K.variable(0.1)
         self.theta = tf.keras.layers.Embedding(
             self.num_items,
             self.latent_dim,
@@ -42,27 +45,21 @@ class PoincareEmbedding(ModelMixin, tf.keras.Model):
     @staticmethod
     def distance(u, v, eps=1e-5):
         # eq (1)
-        tf.debugging.check_numerics(u, "u")
-        tf.debugging.check_numerics(v, "v")
         one_minus_u_norm_sq = 1.0 - tf.clip_by_value(
-            tf.reduce_sum(u * u, axis=2), 0, 1 - eps
+            tf.reduce_sum(u * u, axis=-1), 0, 1 - eps
         )
         one_minus_v_norm_sq = 1.0 - tf.clip_by_value(
-            tf.reduce_sum(v * v, axis=2), 0, 1 - eps
+            tf.reduce_sum(v * v, axis=-1), 0, 1 - eps
         )
-        tf.debugging.check_numerics(one_minus_u_norm_sq, "one u")
-        tf.debugging.check_numerics(one_minus_v_norm_sq, "one v")
         u_minus_v_norm_sq = tf.sqrt(
-            tf.reduce_sum(tf.pow(u - v, 2), axis=2) + eps
+            tf.reduce_sum(tf.pow(u - v, 2), axis=-1) + eps
         )
-        tf.debugging.check_numerics(u_minus_v_norm_sq, "u minus v")
-        toacosh = 1.0 + 2.0 * u_minus_v_norm_sq / (
-            one_minus_u_norm_sq * one_minus_v_norm_sq
+        return tf.math.acosh(
+            1.0
+            + 2.0
+            * u_minus_v_norm_sq
+            / (one_minus_u_norm_sq * one_minus_v_norm_sq)
         )
-        tf.debugging.check_numerics(toacosh, "toacosh")
-        acosh = tf.math.acosh(toacosh)
-        tf.debugging.check_numerics(acosh, "acosh")
-        return acosh
 
     @staticmethod
     def loss_fxn(dist_uv, dist_uvprimes):
@@ -74,6 +71,18 @@ class PoincareEmbedding(ModelMixin, tf.keras.Model):
             )
         )
 
+    def fermi_dirac(self, duv):
+        # eq (6)
+        return 1.0 / (tf.math.exp((duv - self.r) / self.t) + 1.0)
+
+    @staticmethod
+    def score_is_a(u, v, alpha=1e3):
+        # eq (7)
+        return -(
+            1.0
+            + alpha * (tf.linalg.norm(v, axis=-1) - tf.linalg.norm(u, axis=-1))
+        ) * self.distance(u, v)
+
     # @tf.function
     def call(self, inputs):
         """Embed items into poincare ball.
@@ -81,38 +90,10 @@ class PoincareEmbedding(ModelMixin, tf.keras.Model):
         Args:
             inputs (tuple): (u[Int], v[Int], vprimes[List[Int]])
         """
-        # tf.print("start")
-        _u, _v, _vprimes = (
-            tf.reshape(inputs[:, 0], (-1, 1)),
-            tf.reshape(inputs[:, 1], (-1, 1)),
-            inputs[:, 2:],
-        )  # indices
-        # tf.print(_u.shape, _v.shape, _vprimes.shape)
-        # tf.print(_u, _v, _vprimes)
-        u, v, vprimes = self.theta(_u), self.theta(_v), self.theta(_vprimes)
-        # tf.print(u.shape, v.shape, vprimes.shape)
-        dist_uv = self.distance(u, v)
-        tf.debugging.check_numerics(dist_uv, "dist_uv nans")
-        dist_uvprimes = self.distance(u, vprimes)
-        tf.debugging.check_numerics(dist_uvprimes, "dist_uvprime nans")
-        return dist_uv, dist_uvprimes
-
-    def train_step(self, inputs):
-        with tf.GradientTape() as tape:
-            dist_uv, dist_uvprimes = self.call(inputs)
-            loss = self.loss_fxn(dist_uv, dist_uvprimes)
-            tf.debugging.check_numerics(loss, "loss nans")
-        grads = tape.gradient(loss, self.trainable_variables)
-        self.optimizer.apply_gradients(zip(grads, self.trainable_variables))
-        tf.debugging.check_numerics(
-            self.theta.embeddings, "embeddings after grad update nans"
-        )
-        tf.Assert(
-            tf.less_equal(tf.linalg.norm(self.theta.embeddings), 1.0),
-            [tf.linalg.norm(self.theta.embeddings)],
-            name="theta",
-        )
-        return {"loss": loss}
+        u, v = inputs
+        u, v = self.theta(u), self.theta(v)
+        duv = self.distance(u, v)
+        return self.fermi_dirac(duv)
 
 
 class SkipGramDataGenerator(Sequence):

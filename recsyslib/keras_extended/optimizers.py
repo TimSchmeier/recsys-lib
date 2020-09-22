@@ -6,6 +6,7 @@ from tensorflow.python.ops import (
     control_flow_ops,
     math_ops,
     state_ops,
+    linalg_ops,
 )
 
 
@@ -16,23 +17,23 @@ class PoincareSGD(tf.keras.optimizers.SGD):
     @staticmethod
     def _euclid_to_riemann_grad(g, v):
         # eq (4) from Nickel without projection.
-        theta_norm_sq = math_ops.reduce_sum(v * v, axis=1)[:, tf.newaxis]
+        theta_norm_sq = v * v
         conversion_coef = ((1.0 - theta_norm_sq) ** 2) / 4.0
         return conversion_coef * g
 
     @staticmethod
     def proj(theta, eps=1e-2):
         # eq (3.5)
-        norms = tf.reshape(linalg_ops.norm(theta, axis=1), (-1, 1))
+        norms = linalg_ops.norm(theta)
         normed = theta / (norms + eps)
         return array_ops.where(norms < 1.0 - eps, theta, normed)
 
     def _resource_apply_dense(self, grad, var, apply_state=None):
         # intercept and scale gradient
         var_dtype = var.dtype.base_dtype
-        lr = self._get_hyper("lr", var_dtype)
+        lr = self._get_hyper("learning_rate", var_dtype)
+        # eq (4)
         grad = self._euclid_to_riemann_grad(grad, var)
-        # grad = tf.clip_by_value(grad, -5., 5.)
         var_t = self.proj(var - lr * grad)
         var_update = state_ops.assign(
             var, var_t, use_locking=self._use_locking
@@ -43,10 +44,9 @@ class PoincareSGD(tf.keras.optimizers.SGD):
     def _resource_apply_sparse(self, grad, var, apply_state=None):
         # intercept and scale gradient
         var_dtype = var.dtype.base_dtype
-        lr = self._get_hyper("lr", var_dtype)
+        lr = self._get_hyper("learning", var_dtype)
         grad = self._euclid_to_riemann_grad(grad, var)
-        # grad = tf.clip_by_value(grad, -5., 5.)
-        var_t = self.proj(var - self.learning_rate * grad)
+        var_t = self.proj(var - lr * grad)
         var_update = state_ops.assign(
             var, var_t, use_locking=self._use_locking
         )
