@@ -1,10 +1,8 @@
-from scipy.sparse.linalg import svds
-from scipy.sparse import csr_matrix
-from recsyslib.modelmixin import ModelMixin
-import numpy as np
+from recsyslib.als.alsmixin import ALSMixin
+import tensorflow as tf
 
 
-class SVD(ModelMixin):
+class SVD(ALSMixin):
     def __init__(
         self,
         num_users,
@@ -20,13 +18,19 @@ class SVD(ModelMixin):
         )
         self.U, self.S, self.Vt = None, None, None
 
+    # TODO store only latent_dim number of singular vectors/values
     @property
     def user_embeddings(self):
-        return self.U * np.sqrt(self.S.reshape(1, -1))
+        return (self.U * tf.math.sqrt(self.S.reshape(1, -1))).numpy()
 
     @property
     def item_embeddings(self):
-        return (np.sqrt(self.S.reshape(-1, 1)) * self.Vt).T
+        return (
+            tf.transpose(tf.math.sqrt(self.S.reshape(-1, 1)) * self.Vt)
+        ).numpy()
+
+    def interact_to_confidence(self, y):
+        return y
 
     def fit(self, x, y):
         """Run singular value decomposition on a user item interactions.
@@ -36,13 +40,10 @@ class SVD(ModelMixin):
             y (float): measure of a user's preference for an item
         """
 
-        users, items = x
-        ratings = y
-        user_by_item = csr_matrix(
-            (ratings, (users, items)), shape=(self.num_users, self.num_items)
-        )
-        self.call(user_by_item)
+        user_by_item = self.build_sparse_matrix(x, y)
+        self.call(tf.sparse.to_dense(user_by_item))
 
     def call(self, inputs):
-        self.U, self.S, self.Vt = svds(inputs, k=self.latent_dim)
+        self.logger.info("fit begin")
+        self.S, self.U, self.Vt = tf.linalg.svd(inputs)
         self.logger.info("fit complete")
