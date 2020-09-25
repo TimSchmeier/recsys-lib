@@ -1,10 +1,8 @@
-import numpy as np
-from recsyslib.modelmixin import ModelMixin
-from tqdm import tqdm
+from recsyslib.als.alsmixin import ALSMixin
 import tensorflow as tf
 
 
-class LogisticALS(ModelMixin):
+class LogisticMF(ALSMixin):
     def __init__(
         self,
         num_users,
@@ -13,6 +11,7 @@ class LogisticALS(ModelMixin):
         alpha=40,
         lambduh=100,
         gamma=1.0,
+        log=False,
         **kwargs,
     ):
         """Implimentation of:
@@ -29,14 +28,14 @@ class LogisticALS(ModelMixin):
             alpha (float): used to compute confidence value
             lambduh (float): L2 regularization strength
             gamma (float): hyperparameter for Adagrad updates
+            log (bool): if True, confidence computed as 1.0 + alpha * log(1 + interact); else alpha * interact
         """
 
         self.name = name
-        super().__init__(num_users, num_items, **kwargs)
+        super().__init__(num_users, num_items, log, **kwargs)
         self.alpha = alpha
         self.lambduh = lambduh
         self.gamma = gamma
-        self.EPS = 1e-5
         self.Y = tf.Variable(
             tf.random.normal(shape=(self.num_items, self.latent_dim)),
             trainable=False,
@@ -74,41 +73,12 @@ class LogisticALS(ModelMixin):
     def user_embeddings(self):
         return (self.X + self.Bu).numpy()
 
-    def fit(self, x, y, epochs=20):
-        """Run Implicit ALS on user item interactions.
-
-        Args:
-            x (tuple): (user_index, item_index)
-            y (float): measure of a user's preference for an item
-        """
-        users, items = x
-        ratings = self.interact_to_confidence(y).astype(np.float32)
-        indices = [[u, i] for u, i in zip(users, items)]
-        alphaR = tf.sparse.reorder(
-            tf.sparse.SparseTensor(
-                indices=indices,
-                values=ratings,
-                dense_shape=[self.num_users, self.num_items],
-            )
-        )
-        self.logger.info("begin training")
-        for it in tqdm(range(epochs)):
-            self.call(alphaR)
-            self.logger.info(f"epoch {it} complete")
-
-    def _clip_grad(self, grad, val=80.0):
+    def _clip_grad(self, grad):
         # protect against exp(grad) overflows
         return tf.clip_by_value(grad, -10, 10)
 
-    def loginteract_to_confidence(self, val):
-        # eq (1.5)
-        return 1.0 + self.alpha * np.log(1.0 + val / self.EPS)
-
-    def interact_to_confidence(self, val):
-        return self.alpha * val
-
     @tf.function
-    def get_common_grad(self, alphaR):
+    def _get_common_grad(self, alphaR):
         grad = tf.math.exp(
             self._clip_grad(
                 (self.X @ tf.transpose(self.Y) + self.Bu + self.Bi)
@@ -121,7 +91,7 @@ class LogisticALS(ModelMixin):
     @tf.function
     def update_users(self, alphaR):
         # eq (5)
-        grad = self.get_common_grad(alphaR)
+        grad = self._get_common_grad(alphaR)
         gradX = (
             tf.sparse.sparse_dense_matmul(alphaR, self.Y)
             - grad @ self.Y
@@ -139,12 +109,10 @@ class LogisticALS(ModelMixin):
         self.Bu.assign_add(
             (self.gamma * gradBu) / tf.math.sqrt(self.sum_sq_grad_Bu)
         )
-        tf.debugging.check_numerics(self.X, "X not numeric")
-        tf.debugging.check_numerics(self.Bu, "Bu not numeric")
 
     @tf.function
     def update_items(self, alphaR):
-        grad = self.get_common_grad(alphaR)
+        grad = self._get_common_grad(alphaR)
         gradY = (
             tf.sparse.sparse_dense_matmul(tf.sparse.transpose(alphaR), self.X)
             - tf.transpose(grad) @ self.X
@@ -161,8 +129,6 @@ class LogisticALS(ModelMixin):
         self.Bi.assign_add(
             (self.gamma * gradBi) / tf.math.sqrt(self.sum_sq_grad_Bi)
         )
-        tf.debugging.check_numerics(self.Y, "Y not numeric")
-        tf.debugging.check_numerics(self.Bi, "Bi not numeric")
 
     def call(self, inputs):
         """Run ALS.
@@ -174,3 +140,14 @@ class LogisticALS(ModelMixin):
         self.logger.info("updated items")
         self.update_users(inputs)
         self.logger.info("updated users")
+
+    @tf.function
+    def mse(self, M):
+        return tf.reduce_mean(
+            tf.pow(
+                M
+                - (self.X @ tf.transpose(self.Y) + self.Bu + self.Bi)
+                * self.alpha,
+                2,
+            )
+        )

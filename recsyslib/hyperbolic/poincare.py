@@ -3,11 +3,6 @@ from recsyslib.modelmixin import ModelMixin
 import tensorflow.keras.backend as K
 
 
-WINDOW_SIZE = 2
-NEG_SAMPLES = 10
-BATCH_SIZE = 32
-
-
 class PoincareEmbedding(ModelMixin, tf.keras.Model):
     def __init__(self, num_items, **kwargs):
         """Implimentation of:
@@ -28,6 +23,7 @@ class PoincareEmbedding(ModelMixin, tf.keras.Model):
             embeddings_initializer=tf.keras.initializers.RandomUniform(
                 minval=-0.001, maxval=0.001
             ),
+            name="theta",
         )
 
     @staticmethod

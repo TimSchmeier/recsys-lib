@@ -1,10 +1,10 @@
 import numpy as np
-from recsyslib.modelmixin import ModelMixin
+from recsyslib.als.alsmixin import ALSMixin
 from tqdm import tqdm
 import tensorflow as tf
 
 
-class ImplicitALS(ModelMixin):
+class ImplicitMF(ALSMixin):
     def __init__(
         self,
         num_users,
@@ -12,6 +12,7 @@ class ImplicitALS(ModelMixin):
         name="impALS",
         alpha=40,
         lambduh=100,
+        log=False,
         **kwargs,
     ):
         """Implimentation of:
@@ -26,10 +27,10 @@ class ImplicitALS(ModelMixin):
             num_items (int): number of items
             alpha (float): used to compute confidence value
             lambduh (float): L2 regularization strength
+            log (bool): if True, confidence computed as 1.0 + alpha * log(1 + interact); else alpha * interact
         """
         self.name = name
-        super().__init__(num_users, num_items, **kwargs)
-        self.EPS = 1e-6
+        super().__init__(num_users, num_items, log, **kwargs)
         self.alpha = np.float32(alpha)
         self.lambduh = np.float32(lambduh)
         self.Y = tf.Variable(
@@ -49,35 +50,6 @@ class ImplicitALS(ModelMixin):
     def user_embeddings(self):
         return self.X.numpy()
 
-    def fit(self, x, y, epochs=20):
-        """Run Implicit ALS on user item interactions.
-
-        Args:
-            x (tuple): (user_index, item_index)
-            y (float): measure of a user's preference for an item
-        """
-        users, items = x
-        confidences = self.interact_to_confidence(y).astype(np.float32)
-        indices = [[u, i] for u, i in zip(users, items)]
-        C = tf.sparse.reorder(
-            tf.sparse.SparseTensor(
-                indices,
-                confidences,
-                dense_shape=[self.num_users, self.num_items],
-            )
-        )
-        self.logger.info("begin training")
-        for it in tqdm(range(epochs)):
-            self.call(C)
-            self.logger.info(f"epoch {it} complete")
-
-    def interact_to_confidence(self, val):
-        return self.alpha * val
-
-    def loginteract_to_confidence(self, val):
-        # eq (6)
-        return 1.0 + self.alpha * np.log(1 + val / self.EPS)
-
     def call(self, inputs):
         """Run ALS.
 
@@ -86,9 +58,7 @@ class ImplicitALS(ModelMixin):
         """
         C = inputs
         self.update_items(C)
-        self.logger.info("updated items")
         self.update_users(C)
-        self.logger.info("updated users")
 
     @tf.function
     def vector_update(self, XtX, X, v, lambduhI):
@@ -100,17 +70,11 @@ class ImplicitALS(ModelMixin):
         inv = tf.linalg.inv(XtCiX + lambduhI)
         return tf.squeeze(inv @ tf.transpose(X) @ Cv @ pv)
 
-        """
-        return tf.linalg.inv(
-            XtX + tf.transpose(X) @ (tf.linalg.diag(v) - tf.linalg.eye(tf.shape(v)[0])) @ X + lambduhI
-            ) @ tf.transpose(X) @ tf.linalg.diag(v) @ tf.where(v > 0., 1., 0.)
-        """
-
     @tf.function
     def update_items(self, C):
         XtX = tf.transpose(self.X) @ self.X
         lambduhI = tf.linalg.eye(self.latent_dim) * self.lambduh
-        for i in tf.range(self.num_items):
+        for i in tqdm(tf.range(self.num_items)):
             iv = tf.squeeze(
                 tf.sparse.to_dense(
                     tf.sparse.slice(C, [0, i], [self.num_users, 1])
@@ -122,10 +86,14 @@ class ImplicitALS(ModelMixin):
     def update_users(self, C):
         YtY = tf.transpose(self.Y) @ self.Y
         lambduhI = tf.linalg.eye(self.latent_dim) * self.lambduh
-        for u in tf.range(self.num_users):
+        for u in tqdm(tf.range(self.num_users)):
             uv = tf.squeeze(
                 tf.sparse.to_dense(
                     tf.sparse.slice(C, [u, 0], [1, self.num_items])
                 )
             )
             self.X[u].assign(self.vector_update(YtY, self.Y, uv, lambduhI))
+
+    @tf.function
+    def mse(self, M):
+        return tf.reduce_mean(tf.pow(M - self.X @ tf.transpose(self.Y), 2))

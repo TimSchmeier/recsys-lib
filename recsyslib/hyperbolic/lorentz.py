@@ -3,20 +3,6 @@ from recsyslib.modelmixin import ModelMixin
 from recsyslib.keras_extended.initializers import LorentzInitializer
 
 
-WINDOW_SIZE = 2
-NEG_SAMPLES = 10
-BATCH_SIZE = 32
-
-
-@tf.function
-def lorentz_scalar_product(x, y):
-    # eq (2)
-    p = x * y
-    dotL = -1.0 * p[:, 0]
-    dotL += tf.reduce_sum(p[:, 1:], axis=1)
-    return dotL
-
-
 class LorentzEmbedding(ModelMixin, tf.keras.Model):
     def __init__(self, num_items, **kwargs):
         """Implimentation of:
@@ -34,12 +20,23 @@ class LorentzEmbedding(ModelMixin, tf.keras.Model):
             kernel_initializer=LorentzInitializer(),
         )
 
+    def lorentz_scalar_product(self, x, y):
+        # eq (2)
+        p = x * y
+        dotL = -1.0 * p[:, 0]
+        dotL += tf.reduce_sum(p[:, 1:], axis=1)
+        return dotL
+
     def dist(self, x, y):
         # eq (5)
-        return tf.math.arcosh(-1.0 * lorentz_scalar_product(x, y))
+        return tf.math.arcosh(-1.0 * self.lorentz_scalar_product(x, y))
+
+    def fermi_dirac(self, duv):
+        # eq (6)
+        return 1.0 / (tf.math.exp((duv - self.r) / self.t) + 1.0)
 
     @staticmethod
-    def loss(dist_uv, dist_uvprimes):
+    def ranking_loss(dist_uv, dist_uvprimes):
         # eq (5)
         return tf.log(
             tf.exp(-dist_uv) / tf.reduce_mean(tf.exp(-dist_uvprimes))
@@ -56,16 +53,7 @@ class LorentzEmbedding(ModelMixin, tf.keras.Model):
         Args:
             inputs (tuple):
         """
-        parent, child, unrelated = inputs
-        u = self.theta(parent)
-        dist_uv = self.distance(u, self.theta(child))
-        dist_uvprimes = self.distance(u, self.theta(unrelated))
-        return dist_uv, dist_uvprimes
-
-    def train_step(self, inputs):
-        with tf.GradientTape() as tape:
-            dist_uv, dist_uvprimes = self.call(inputs)
-            loss = self.loss(dist_uv, dist_uvprimes)
-        grads = tape.gradient(loss, self.trainable_variables)
-        self.optimizer.apply_gradients(zip(grads, self.trainable_variables))
-        self.theta = self.project(self.theta)
+        u, v = inputs
+        u, v = self.theta(u), self.theta(v)
+        duv = self.distance(u, v)
+        return self.fermi_dirac(duv)

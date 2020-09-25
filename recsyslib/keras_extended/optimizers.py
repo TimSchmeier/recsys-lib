@@ -53,14 +53,14 @@ class PoincareSGD(tf.keras.optimizers.SGD):
 
 
 class LorentzSGD(tf.keras.optimizers.SGD):
-    def __init__(self, learning_rate, latent_dim):
+    def __init__(self, learning_rate):
         super().__init__(learning_rate, name="lorentzSGD")
 
     def lorentz_scalar_product(self, x, y):
         # eq (2)
         p = x * y
         dotL = -1.0 * p[:, 0]
-        dotL += math_ops.sum(p[:, 1:], axis=1)
+        dotL += math_ops.reduce_sum(p[:, 1:], axis=1)
         return dotL
 
     def exp_map(self, v, x):
@@ -75,11 +75,11 @@ class LorentzSGD(tf.keras.optimizers.SGD):
     def _resource_apply_dense(self, grad, var, apply_state=None):
         var_dtype = var.dtype.base_dtype
         lr = self._get_hyper("learning_rate", var_dtype)
-        gl = array_ops.identity(grad)
-        gl[0, 0] = -1
-        h = gl * grad
-        gradfvar = self.proj(h, var)
-        var_t = self.exp_map(-lr * gradfvar, var)
+        gl = tf.constant(-1.0)
+        h0 = gl * grad[0, :]
+        h = tf.stack([h0, grad[1:, :]], axis=1)
+        grad = self.proj(h, var)
+        var_t = self.exp_map(-lr * grad, var)
         var_update = state_ops.assign(
             var, var_t, use_locking=self._use_locking
         )

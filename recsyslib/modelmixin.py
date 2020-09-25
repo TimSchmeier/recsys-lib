@@ -11,6 +11,7 @@ class ModelMixin:
         self.num_users = num_users
         self.num_items = num_items
         self.latent_dim = latent_dim
+        self.history = {"loss": []}
         self.logger = logging.getLogger(self.name)
         self.logger.setLevel(logging.INFO)
 
