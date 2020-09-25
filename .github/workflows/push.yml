@@ -34,8 +34,7 @@ jobs:
     - name: Install Deps
       run: |
         pip install -r test_requirements.txt
-        pip install e .
-        echo "::set-env name=TEST::TEST"
+        pip install -e .
 
     - name: Pep Lint
       run: flake8 recsyslib/
