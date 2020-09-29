@@ -81,6 +81,7 @@ class AE(ModelMixin, tf.keras.Model):
         return self.dec(h)
 
     def train_step(self, inputs):
+        inputs = tf.sparse.to_dense(inputs)
         with tf.GradientTape() as tape:
             recon_x = self(inputs)
             loss = tf.reduce_mean(
@@ -91,3 +92,7 @@ class AE(ModelMixin, tf.keras.Model):
             zip(gradients, self.trainable_variables)
         )
         return {"loss": loss}
+
+    def fit(self, x, y, **kwargs):
+        M = self.build_sparse_matrix(x, y)
+        super().fit(x=M, **kwargs)

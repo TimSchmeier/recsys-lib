@@ -38,15 +38,19 @@ def dcg(y, ypred, yrel=None):
         yrel = np.ones_like(y)
     score = 0.0
     # sum over (relevant score) / log(list rank + 1)
-    for rank, (yhati, yreli) in enumerate(zip(ypred, yrel), 1):
+    for rank, yhati in enumerate(ypred, 1):
         # if predicted item is in relevant set
         if yhati in y:
+            # find associated score with that item
+            yreli = yrel[y.index(yhati)]
             # add the relevance score adjusted for that rank
-            score += yreli / np.log(rank + 1)
+            discount = np.log(rank + 1)
+            s = yreli / discount
+            score += s
     return score
 
 
-def idcg(k, yrel):
+def idcg(k, yrel=None):
     """
     Ideal discounted cumulative gain, assumes perfect ranking by yrel.
 
@@ -57,6 +61,8 @@ def idcg(k, yrel):
     # highest possible dcg @ k, assume all items ranked perfectly
     if not yrel:
         yrel = np.ones(k)
+    # largest scores ranked first
+    yrel = sorted(yrel, reverse=True)
     score = 0.0
     for rank, yreli in enumerate(yrel, 1):
         score += yreli / np.log(rank + 1)
@@ -75,8 +81,5 @@ def ndcg(y, ypred, yrel=None):
 
     score = dcg(y, ypred, yrel)
     k = len(y)
-    if yrel:
-        score /= idcg(k, sorted(yrel, reverse=True))
-    else:
-        score /= idcg(k, np.ones_like(y))
+    score /= idcg(k, yrel)
     return score

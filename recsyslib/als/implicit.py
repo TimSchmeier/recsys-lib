@@ -1,6 +1,7 @@
 import numpy as np
 from recsyslib.als.alsmixin import ALSMixin
 import tensorflow as tf
+from recsyslib.target_transforms import interact_to_confidence
 
 
 class ImplicitMF(ALSMixin):
@@ -92,6 +93,9 @@ class ImplicitMF(ALSMixin):
                 )
             )
             self.X[u, :].assign(self.vector_update(YtY, self.Y, uv, lambduhI))
+
+    def transform_y(self, y):
+        return interact_to_confidence(y, alpha=self.alpha)
 
     @tf.function
     def mse(self, M):

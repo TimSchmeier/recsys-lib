@@ -87,3 +87,16 @@ class LogisticMF(MF):
         dot_product = self.get_dot(inputs)
         logistic = dot_product / (1.0 + dot_product)
         return logistic
+
+    def train_step(self, inputs):
+        X, y = inputs
+        with tf.GradientTape() as tape:
+            preds = self(X)
+            loss = tf.reduce_mean(
+                tf.keras.losses.binary_crossentropy(y, preds)
+            )
+        gradients = tape.gradient(loss, self.trainable_variables)
+        self.optimizer.apply_gradients(
+            zip(gradients, self.trainable_variables)
+        )
+        return {"loss": loss}

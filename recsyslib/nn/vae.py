@@ -100,6 +100,7 @@ class VAE(ModelMixin, tf.keras.Model):
         return z_mean, z_log_var, z, reconstructed_x
 
     def train_step(self, inputs):
+        inputs = tf.sparse.to_dense(inputs)
         with tf.GradientTape() as tape:
             z_mean, z_log_var, z, reconstructed_x = self.call(inputs)
             reconstruction_loss = (

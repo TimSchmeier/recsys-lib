@@ -1,5 +1,6 @@
 from recsyslib.als.alsmixin import ALSMixin
 import tensorflow as tf
+from recsyslib.target_transforms import interact_to_confidence
 
 
 class LogisticMF(ALSMixin):
@@ -141,11 +142,14 @@ class LogisticMF(ALSMixin):
         self.update_users(inputs)
         self.logger.info("updated users")
 
+    def transform_y(self, y):
+        return interact_to_confidence(y, alpha=self.alpha)
+
     @tf.function
     def mse(self, M):
         return tf.reduce_mean(
             tf.pow(
-                M
+                tf.sparse.to_dense(M)
                 - (self.X @ tf.transpose(self.Y) + self.Bu + self.Bi)
                 * self.alpha,
                 2,

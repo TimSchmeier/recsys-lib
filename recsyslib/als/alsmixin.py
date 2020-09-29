@@ -1,5 +1,4 @@
 from recsyslib.modelmixin import ModelMixin
-from recsyslib.target_transforms import interact_to_confidence
 from collections import namedtuple
 import tensorflow as tf
 from tqdm import tqdm
@@ -14,9 +13,6 @@ class ALSMixin(ModelMixin):
         super().__init__(num_users, num_items, **kwargs)
         self.history = history([])
         self.log = log
-
-    def transform_y(self, y):
-        return interact_to_confidence(y)
 
     def fit(self, x, y, epochs=20):
         """Run ALS on user item interactions.
