@@ -1,5 +1,6 @@
 from recsyslib.als.alsmixin import ALSMixin
-import tensorflow as tf
+import numpy as np
+from scipy.sparse import csr_matrix, linalg
 
 
 class SVD(ALSMixin):
@@ -10,6 +11,15 @@ class SVD(ALSMixin):
         name="svd",
         **kwargs,
     ):
+        """
+        Vanilla SVD on a sparse matrix.
+
+        Args:
+            num_users (int): number of users
+            num_items (int): number of items
+            name (str): date/model name
+        """
+
         self.name = name
         super().__init__(
             num_users,
@@ -21,16 +31,17 @@ class SVD(ALSMixin):
     # TODO store only latent_dim number of singular vectors/values
     @property
     def user_embeddings(self):
-        return (self.U * tf.math.sqrt(self.S.reshape(1, -1))).numpy()
+        return self.U * np.sqrt(self.S.reshape(1, -1))
 
     @property
     def item_embeddings(self):
-        return (
-            tf.transpose(tf.math.sqrt(self.S.reshape(-1, 1)) * self.Vt)
-        ).numpy()
+        return (np.sqrt(self.S.reshape(-1, 1)) * self.Vt).T
 
     def interact_to_confidence(self, y):
         return y
+
+    def build_sparse_matrix(self, x, y):
+        return csr_matrix((y, x), shape=(self.num_users, self.num_items))
 
     def fit(self, x, y):
         """Run singular value decomposition on a user item interactions.
@@ -41,9 +52,9 @@ class SVD(ALSMixin):
         """
 
         user_by_item = self.build_sparse_matrix(x, y)
-        self.call(tf.sparse.to_dense(user_by_item))
+        self.call(user_by_item)
 
     def call(self, inputs):
         self.logger.info("fit begin")
-        self.S, self.U, self.Vt = tf.linalg.svd(inputs)
+        self.U, self.S, self.Vt = linalg.svds(inputs, k=self.latent_dim)
         self.logger.info("fit complete")

@@ -1,5 +1,7 @@
 import logging
 import sys
+import numpy as np
+import tensorflow as tf
 
 
 LATENT_DIM = 50
@@ -23,3 +25,19 @@ class ModelMixin:
             )
             handler.setFormatter(formatter)
             self.logger.addHandler(handler)
+
+    def transform_y(self, y):
+        return y
+
+    def build_sparse_matrix(self, x, y):
+        users, items = x
+        confidences = self.transform_y(y).astype(np.float32)
+        indices = [[u, i] for u, i in zip(users, items)]
+        M = tf.sparse.reorder(
+            tf.sparse.SparseTensor(
+                indices,
+                confidences,
+                dense_shape=[self.num_users, self.num_items],
+            )
+        )
+        return M

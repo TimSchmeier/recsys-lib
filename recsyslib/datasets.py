@@ -3,7 +3,6 @@ import pandas as pd
 import numpy as np
 from zipfile import ZipFile
 from tensorflow import keras
-from scipy.sparse import csr_matrix
 import itertools
 
 
@@ -143,25 +142,6 @@ class MovieLensData:
             X_train, X_test = X[:training], X[training:]
             y_train, y_test = y[:training], y[training:]
             return (X_train, X_test, y_train, y_test)
-
-    def get_user_item_rating_matrix(self, scale=False, split=0.9):
-        if split:
-            (
-                X_train,
-                X_test,
-                y_train,
-                y_test,
-            ) = self.get_user_item_rating_tuples(scale, split)
-            train = csr_matrix(
-                (y_train, X_train), shape=(self.num_users, self.num_items)
-            )
-            test = csr_matrix(
-                (y_test, X_test), shape=(self.num_users, self.num_items)
-            )
-            return train, test
-        else:
-            X, y = self.get_user_item_rating_tuples(scale, split)
-            return csr_matrix((y, X), shape=(self.num_users, self.num_items))
 
     def get_genre_movie_data(self):
         movies = self.df[

@@ -19,7 +19,7 @@ class VAEncoder(ModelMixin, tf.keras.Model):
     def __init__(self, num_users, num_items, num_dense, **kwargs):
         super().__init__(num_users, num_items, **kwargs)
         self.dense_layers = []
-        for layer in range(num_dense, 0, -1):
+        for layer in range(num_dense):
             self.dense_layers.append(
                 layers.Dense(
                     600,
@@ -46,7 +46,7 @@ class VADecoder(ModelMixin, tf.keras.Model):
     def __init__(self, num_users, num_items, num_dense, **kwargs):
         super().__init__(num_users, num_items, **kwargs)
         self.dense_layers = []
-        for layer in range(1, num_dense + 1):
+        for layer in range(num_dense):
             self.dense_layers.append(
                 layers.Dense(
                     600,
@@ -105,7 +105,7 @@ class VAE(ModelMixin, tf.keras.Model):
             reconstruction_loss = (
                 tf.reduce_mean(
                     tf.keras.losses.binary_crossentropy(
-                        tf.sparse.to_dense(inputs), reconstructed_x
+                        inputs, reconstructed_x
                     )
                 )
                 * self.num_items

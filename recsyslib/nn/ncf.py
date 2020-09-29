@@ -1,9 +1,9 @@
 import tensorflow as tf
 from tensorflow.keras import layers
-from recsyslib.mf import MatrixFactorization
+from recsyslib.nn.mf import MF
 
 
-class NeuMF(MatrixFactorization):
+class NeuMF(MF):
     def __init__(self, num_users, num_items, num_dense=3, **kwargs):
         """
         Implimentation of:

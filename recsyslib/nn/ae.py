@@ -79,3 +79,15 @@ class AE(ModelMixin, tf.keras.Model):
     def call(self, inputs):
         h = self.enc(inputs)
         return self.dec(h)
+
+    def train_step(self, inputs):
+        with tf.GradientTape() as tape:
+            recon_x = self(inputs)
+            loss = tf.reduce_mean(
+                tf.keras.losses.binary_crossentropy(inputs, recon_x)
+            )
+        gradients = tape.gradient(loss, self.trainable_variables)
+        self.optimizer.apply_gradients(
+            zip(gradients, self.trainable_variables)
+        )
+        return {"loss": loss}

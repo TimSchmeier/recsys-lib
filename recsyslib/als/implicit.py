@@ -1,6 +1,5 @@
 import numpy as np
 from recsyslib.als.alsmixin import ALSMixin
-from tqdm import tqdm
 import tensorflow as tf
 
 
@@ -74,25 +73,25 @@ class ImplicitMF(ALSMixin):
     def update_items(self, C):
         XtX = tf.transpose(self.X) @ self.X
         lambduhI = tf.linalg.eye(self.latent_dim) * self.lambduh
-        for i in tqdm(tf.range(self.num_items)):
+        for i in range(self.num_items):
             iv = tf.squeeze(
                 tf.sparse.to_dense(
                     tf.sparse.slice(C, [0, i], [self.num_users, 1])
                 )
             )
-            self.Y[i].assign(self.vector_update(XtX, self.X, iv, lambduhI))
+            self.Y[i, :].assign(self.vector_update(XtX, self.X, iv, lambduhI))
 
     @tf.function
     def update_users(self, C):
         YtY = tf.transpose(self.Y) @ self.Y
         lambduhI = tf.linalg.eye(self.latent_dim) * self.lambduh
-        for u in tqdm(tf.range(self.num_users)):
+        for u in range(self.num_users):
             uv = tf.squeeze(
                 tf.sparse.to_dense(
                     tf.sparse.slice(C, [u, 0], [1, self.num_items])
                 )
             )
-            self.X[u].assign(self.vector_update(YtY, self.Y, uv, lambduhI))
+            self.X[u, :].assign(self.vector_update(YtY, self.Y, uv, lambduhI))
 
     @tf.function
     def mse(self, M):

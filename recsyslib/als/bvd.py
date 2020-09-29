@@ -58,6 +58,9 @@ class BVD(ALSMixin):
             name="C",
         )
 
+    def interact_to_confidence(self, y):
+        return y
+
     @property
     def item_embeddings(self):
         return self.C.numpy().T

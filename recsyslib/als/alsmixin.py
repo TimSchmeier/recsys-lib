@@ -1,7 +1,7 @@
 from recsyslib.modelmixin import ModelMixin
+from recsyslib.target_transforms import interact_to_confidence
 from collections import namedtuple
 import tensorflow as tf
-import numpy as np
 from tqdm import tqdm
 
 
@@ -15,24 +15,8 @@ class ALSMixin(ModelMixin):
         self.history = history([])
         self.log = log
 
-    def interact_to_confidence(self, val, eps=1e-5):
-        if not self.log:
-            return self.alpha * val
-        else:
-            return 1.0 + self.alpha * np.log(1 + val / eps)
-
-    def build_sparse_matrix(self, x, y):
-        users, items = x
-        confidences = self.interact_to_confidence(y).astype(np.float32)
-        indices = [[u, i] for u, i in zip(users, items)]
-        M = tf.sparse.reorder(
-            tf.sparse.SparseTensor(
-                indices,
-                confidences,
-                dense_shape=[self.num_users, self.num_items],
-            )
-        )
-        return M
+    def transform_y(self, y):
+        return interact_to_confidence(y)
 
     def fit(self, x, y, epochs=20):
         """Run ALS on user item interactions.
