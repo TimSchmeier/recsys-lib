@@ -34,7 +34,7 @@ class BVD(ALSMixin):
             tf.random.uniform(
                 minval=0.001,
                 maxval=1.0,
-                shape=(self.num_users, self.latent_dim),
+                shape=(self.num_users, self.latent_dim2),
             ),
             trainable=False,
             name="R",
@@ -43,7 +43,7 @@ class BVD(ALSMixin):
             tf.random.uniform(
                 minval=0.001,
                 maxval=1.0,
-                shape=(self.latent_dim, self.latent_dim2),
+                shape=(self.latent_dim2, self.latent_dim),
             ),
             trainable=False,
             name="B",
@@ -52,7 +52,7 @@ class BVD(ALSMixin):
             tf.random.uniform(
                 minval=0.001,
                 maxval=1.0,
-                shape=(self.latent_dim2, self.num_items),
+                shape=(self.latent_dim, self.num_items),
             ),
             trainable=False,
             name="C",

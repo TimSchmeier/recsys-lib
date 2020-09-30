@@ -99,4 +99,6 @@ class ImplicitMF(ALSMixin):
 
     @tf.function
     def mse(self, M):
-        return tf.reduce_mean(tf.pow(M - self.X @ tf.transpose(self.Y), 2))
+        return tf.reduce_mean(
+            tf.pow(tf.sparse.to_dense(M) - self.X @ tf.transpose(self.Y), 2)
+        )

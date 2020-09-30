@@ -8,12 +8,18 @@ LATENT_DIM = 50
 
 
 class ModelMixin:
-    def __init__(self, num_users, num_items, latent_dim=LATENT_DIM, **kwargs):
+    def __init__(
+        self,
+        num_users,
+        num_items,
+        latent_dim=LATENT_DIM,
+        logfile=None,
+        **kwargs
+    ):
         super().__init__(**kwargs)
         self.num_users = num_users
         self.num_items = num_items
         self.latent_dim = latent_dim
-        self.history = {"loss": []}
         self.logger = logging.getLogger(self.name)
         self.logger.setLevel(logging.INFO)
 
@@ -25,6 +31,11 @@ class ModelMixin:
             )
             handler.setFormatter(formatter)
             self.logger.addHandler(handler)
+            if logfile:
+                fhandler = logging.FileHandler(logfile)
+                fhandler.setLevel(logging.INFO)
+                fhandler.setFormatter(formatter)
+                self.logger.addHandler(fhandler)
 
     def transform_y(self, y):
         return y
