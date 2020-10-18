@@ -55,6 +55,20 @@ class PoincareEmbedding(ModelMixin, tf.keras.Model):
             )
         )
 
+    @staticmethod
+    def _euclid_to_riemann_grad(g, v):
+        # eq (4) from Nickel without projection.
+        theta_norm_sq = v * v
+        conversion_coef = ((1.0 - theta_norm_sq) ** 2) / 4.0
+        return conversion_coef * g
+
+    @staticmethod
+    def proj(theta, eps=1e-2):
+        # eq (3.5)
+        norms = tf.linalg.norm(theta)
+        normed = theta / (norms + eps)
+        return tf.where(norms < 1.0 - eps, theta, normed)
+
     def fermi_dirac(self, duv):
         # eq (6)
         return 1.0 / (tf.math.exp((duv - self.r) / self.t) + 1.0)
@@ -71,9 +85,40 @@ class PoincareEmbedding(ModelMixin, tf.keras.Model):
         """Embed items into poincare ball.
 
         Args:
-            inputs (tuple): (u[Int], v[Int], vprimes[List[Int]])
+            inputs (tuple): (u[Int], v[Int])
         """
         u, v = inputs
         u, v = self.theta(u), self.theta(v)
         duv = self.distance(u, v)
         return self.fermi_dirac(duv)
+
+    @tf.function
+    def train_step(self, inputs):
+        x, y, sample_weights = tf.keras.utils.unpack_x_y_sample_weight(inputs)
+        with tf.GradientTape() as tape:
+            y_pred = self(x)
+            loss = self.compiled_loss(y, y_pred)
+            grads = tape.gradient(loss, self.trainable_variables)
+        remaining_grads_and_vars = []
+        for grad, var in zip(grads, self.trainable_variables):
+            if isinstance(
+                grad, tf.python.framework.indexed_slices.IndexedSlices
+            ):
+                # these are embedding slices
+                thetas = tf.gather(var, grad.indices)
+                grad = self._euclid_to_riemann_grad(grad, thetas)
+                new_thetas = self.proj(
+                    thetas - self.optimizer._hyper["learning_rate"] * grad
+                )
+                indices = tf.expand_dims(grad.indices, -1)
+                # manual parameter updates
+                var_t = tf.tensor_scatter_nd_update(var, indices, new_thetas)
+                self.theta.variables[0].assign(var_t)
+            else:
+                # pass other params to optimizer
+                remaining_grads_and_vars.append((grad, var))
+        self.optimizer.apply_gradients(remaining_grads_and_vars)
+        self.compiled_metrics.update_state(y, y_pred)
+        metrics = {"loss": loss}
+        metrics.update({m.name: m.result() for m in self.metrics})
+        return metrics

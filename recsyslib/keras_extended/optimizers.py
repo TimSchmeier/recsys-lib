@@ -60,7 +60,7 @@ class LorentzSGD(tf.keras.optimizers.SGD):
         # eq (2)
         p = x * y
         dotL = -1.0 * p[:, 0]
-        dotL += math_ops.reduce_sum(p[:, 1:], axis=1)
+        dotL += math_ops.reduce_sum(p[:, 1:], axis=-1)
         return dotL
 
     def exp_map(self, v, x):
@@ -75,9 +75,15 @@ class LorentzSGD(tf.keras.optimizers.SGD):
     def _resource_apply_dense(self, grad, var, apply_state=None):
         var_dtype = var.dtype.base_dtype
         lr = self._get_hyper("learning_rate", var_dtype)
-        gl = tf.constant(-1.0)
-        h0 = gl * grad[0, :]
-        h = tf.stack([h0, grad[1:, :]], axis=1)
+        grad_shape = tf.shape(grad)
+        h = (
+            linalg_ops.diag(
+                tf.concat(
+                    [tf.ones(1) * -1.0, tf.ones(grad_shape - 1)], axis=-1
+                )
+            )
+            * grad
+        )
         grad = self.proj(h, var)
         var_t = self.exp_map(-lr * grad, var)
         var_update = state_ops.assign(
