@@ -4,10 +4,13 @@ import logging
 
 
 class EntityModel(tf.keras.Model):
-    def __init__(self, unique_ids, **kwargs):
-        """Generic entity model for embedding lookups with an Integer Id."""
+    def __init__(self, unique_ids, dim=32, **kwargs):
+        """Generic model for embedding items with an Integer Id.
+        Args:
+            unique_ids (list[Int]): unique symbols to embed."""
         super().__init__(**kwargs)
         self.num_entities = len(unique_ids)
+        self.dim = dim
         self.entity_lookup = (
             tf.keras.layers.experimental.preprocessing.IntegerLookup(
                 vocabulary=unique_ids, name="IdLookup"
@@ -17,7 +20,7 @@ class EntityModel(tf.keras.Model):
             [
                 self.entity_lookup,
                 tf.keras.layers.Embedding(
-                    self.entity_lookup.vocab_size(), 32, name="IdEmbedding"
+                    self.entity_lookup.vocab_size(), dim, name="IdEmbedding"
                 ),
             ]
         )
@@ -29,12 +32,22 @@ class EntityModel(tf.keras.Model):
 
 class RetrievalMF(tfrs.models.Model):
     def __init__(self, unique_user_ids, unique_item_ids, **kwargs):
+        """Retrieval Model, minimizes the cross entropy between item and user embeddings.
+        Uses ratings as sample weights if applicable.
+        Args:
+            unique_user_ids (list[Int]): user symbols to embed.
+            unique_item_ids (list[Int]): item symbols to embed.
+        """
         super().__init__(**kwargs)
         self.user_model = EntityModel(unique_user_ids)
         self.item_model = EntityModel(unique_item_ids)
         self.logger = logging.getLogger()
 
     def set_task(self, item_dataset):
+        """
+        Args:
+            item_dataset: tf.data.Dataset of item ids
+        """
         self.task = tfrs.tasks.Retrieval(
             metrics=tfrs.metrics.FactorizedTopK(
                 candidates=item_dataset.batch(128).map(self.item_model),
@@ -58,6 +71,9 @@ class RankingMF(RetrievalMF):
         """Implimentation of:
         He, X. et. al. 2017. Neural Collaborative Filtering.
         WWW '17: Pages 173–182 https://doi.org/10.1145/3038912.3052569
+        Args:
+            unique_user_ids (list[Int]): user symbols to embed.
+            unique_item_ids (list[Int]): item symbols to embed.
         """
         super().__init__(unique_user_ids, unique_item_ids)
         self.rank = tf.keras.Sequential(
@@ -93,8 +109,12 @@ class LogisticRetrieval(tfrs.tasks.Retrieval):
     ):
         super().__init__(loss, metrics, temperature, num_hard_negatives, name)
 
-        self.__loss = tf.keras.losses.CategoricalCrossentropy(
-            from_logits=False, reduction=tf.keras.losses.Reduction.SUM
+        self.__loss = (
+            loss
+            if loss
+            else tf.keras.losses.CategoricalCrossentropy(
+                from_logits=False, reduction=tf.keras.losses.Reduction.SUM
+            )
         )
 
     def _loss(self, y_true, y_pred, sample_weight):
@@ -105,6 +125,11 @@ class LogisticRetrieval(tfrs.tasks.Retrieval):
 
 class LogisticMF(RetrievalMF):
     def __init__(self, unique_user_ids, unique_item_ids, **kwargs):
+        """
+        Args:
+            unique_user_ids (list[Int]): user symbols to embed.
+            unique_item_ids (list[Int]): item symbols to embed.
+        """
         super().__init__(unique_user_ids, unique_item_ids, **kwargs)
 
     def set_task(self, item_dataset):

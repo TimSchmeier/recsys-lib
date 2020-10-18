@@ -1,45 +1,43 @@
 import tensorflow as tf
-from tensorflow.keras.losses import binary_crossentropy
-from recsyslib.modelmixin import ModelMixin
+import tensorflow_recommenders as tfrs
+from recsys.nn.mf import EntityModel
+import logging
 
 
-class W2V(ModelMixin, tf.keras.Model):
-    def __init__(self, num_items, **kwargs):
+class W2V(EntityModel, tfrs.models.Model):
+    def __init__(self, unique_ids, dim=32, **kwargs):
         """Implimentation of:
-            Mikolov, T., et al. (2013). "Efficient Estimation of Word Representations in Vector Space".
+            Mikolov, T., et al. (2013). "Efficient Estimation of Word Representations in Vector Space."
             arXiv:1301.3781
-
         Args:
-            num_items (int): total number of sequence items to embed.
+            unique_item_ids (list[Int]): all unique symbols to embed.
             **kwargs
         """
-        super().__init__(num_users=None, num_items=num_items, **kwargs)
-        self.hidden = tf.keras.layers.Embedding(
-            self.num_items, self.latent_dim
+        super().__init__(unique_ids, dim, **kwargs)
+        self.logger = logging.getLogger()
+        self.context = tf.keras.Sequential(
+            [
+                self.entity_lookup,
+                tf.keras.layers.Embedding(
+                    self.entity_lookup.vocab_size(), dim, name="IdContext"
+                ),
+            ]
         )
-        self.context = tf.keras.layers.Embedding(
-            self.num_items, self.latent_dim
+
+    def set_task(self, item_dataset):
+        self.task = tfrs.tasks.Retrieval(
+            metrics=tfrs.metrics.FactorizedTopK(
+                candidates=item_dataset.batch(128).map(self.item_model)
+            ),
         )
 
     @tf.function
     def call(self, inputs):
-        """Embed word pairs.
+        w, c = inputs
+        return self.entity_embedding(w), self.context(c)
 
-        Args:
-            inputs (tuple): (word, context)
-        """
-        word, context = inputs
-        w = self.hidden(word)
-        c = self.context(context)
-        dot_product = tf.keras.layers.dot([w, c], axes=(1))
-        return tf.nn.sigmoid(dot_product)
-
-    def train_step(self, inputs):
-        x, y = inputs
-        with tf.GradientTape() as tape:
-            ypred = self.call(x)
-            loss = tf.reduce_mean(binary_crossentropy(y, ypred))
-        grads = tape.gradient(loss, self.trainable_variables)
-        self.optimizer.apply_gradients(zip(grads, self.trainable_variables))
-        self.compiled_metrics.update_state(y, ypred)
-        return {m.name: m.result() for m in self.metrics}
+    @tf.function
+    def compute_loss(self, inputs, training=False):
+        x, y, sample_weights = tf.keras.utils.unpack_x_y_sample_weight(inputs)
+        item_embeddings, context_embeddings = self(x)
+        return self.task(item_embeddings, context_embeddings, sample_weights)
