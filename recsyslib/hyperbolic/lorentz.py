@@ -1,4 +1,5 @@
 import tensorflow as tf
+import numpy as np
 from recsyslib.modelmixin import ModelMixin
 from recsyslib.keras_extended.initializers import LorentzInitializer
 
@@ -73,7 +74,6 @@ class LorentzEmbedding(ModelMixin, tf.keras.Model):
         Returns (tensor): updated x."""
         lsp = tf.clip_by_value(self.lorentz_scalar_product(v, v), 1e-6, 100)
         vnorm = tf.math.sqrt(lsp)
-        vnormed = v / vnorm
         return tf.math.cosh(vnorm) * x + tf.math.sinh(vnorm) * (v / vnorm)
 
     def proj(self, u, x):

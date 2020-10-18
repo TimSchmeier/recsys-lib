@@ -1,102 +1,115 @@
 import tensorflow as tf
-from tensorflow.keras import layers
-from recsyslib.modelmixin import ModelMixin
+import tensorflow_recommenders as tfrs
+import logging
 
 
-class MF(ModelMixin, tf.keras.Model):
-    def __init__(self, num_users, num_items, biases=True, **kwargs):
-        super().__init__(num_users, num_items, **kwargs)
-        self.use_biases = biases
-        self.user_embedding = layers.Embedding(
-            self.num_users,
-            self.latent_dim,
-            embeddings_regularizer=tf.keras.regularizers.l2(1e-6),
+class EntityModel(tf.keras.Model):
+    def __init__(self, unique_ids, **kwargs):
+        """Generic entity model for embedding lookups with an Integer Id."""
+        super().__init__(**kwargs)
+        self.num_entities = len(unique_ids)
+        self.entity_lookup = (
+            tf.keras.layers.experimental.preprocessing.IntegerLookup(
+                vocabulary=unique_ids, name="IdLookup"
+            )
         )
-        self.item_embedding = layers.Embedding(
-            self.num_items,
-            self.latent_dim,
-            embeddings_regularizer=tf.keras.regularizers.l2(1e-6),
+        self.entity_embedding = tf.keras.Sequential(
+            [
+                self.entity_lookup,
+                tf.keras.layers.Embedding(
+                    self.entity_lookup.vocab_size(), 32, name="IdEmbedding"
+                ),
+            ]
         )
-        if self.use_biases:
-            self.user_bias = layers.Embedding(num_users, 1)
-            self.item_bias = layers.Embedding(num_items, 1)
-
-    @property
-    def item_embeddings(self):
-        if self.use_biases:
-            return self.item_embeddings + self.item_bias
-        else:
-            return self.item_embeddings
-
-    @property
-    def user_embeddings(self):
-        if self.use_biases:
-            return self.user_embeddings + self.user_bias
-        else:
-            return self.user_embeddings
 
     @tf.function
-    def get_dot(self, inputs):
-        """Forward pass.
-
-        Args:
-            inputs (tuple): (userIdx, itemIdx)
-
-        Returns:
-            tensor: dot product of user and item
-        """
-        user, item = inputs
-        user_vector = self.user_embedding(user)
-        item_vector = self.item_embedding(item)
-        dot_product = tf.reduce_sum(
-            tf.multiply(user_vector, item_vector), axis=1
-        )
-        if self.use_biases:
-            user_bias = self.user_bias(user)
-            item_bias = self.item_bias(item)
-            dot_product = dot_product + user_bias + item_bias
-        return dot_product
-
     def call(self, inputs):
-        """Forward pass.
-
-        Args:
-            inputs (tuple): (userIdx, itemIdx)
-
-        Returns:
-            tensor: positive thresholded dot product of user and item
-        """
-        dot = self.get_dot(inputs)
-        # ratings are only positive
-        return tf.nn.relu(dot)
+        return self.entity_embedding(inputs)
 
 
-class LogisticMF(MF):
-    def __init__(self, num_users, num_items, biases=True, **kwargs):
-        super().__init__(num_users, num_items, biases=True, **kwargs)
+class RetrievalMF(tfrs.models.Model):
+    def __init__(self, unique_user_ids, unique_item_ids, **kwargs):
+        super().__init__(**kwargs)
+        self.user_model = EntityModel(unique_user_ids)
+        self.item_model = EntityModel(unique_item_ids)
+        self.logger = logging.getLogger()
 
-    def call(self, inputs):
-        """Forward pass.
-
-        Args:
-            inputs (tuple): (userIdx, itemIdx)
-
-        Returns:
-            tensor: logistic(dot product of user and item)
-        """
-        dot_product = self.get_dot(inputs)
-        logistic = dot_product / (1.0 + dot_product)
-        return logistic
-
-    def train_step(self, inputs):
-        X, y = inputs
-        with tf.GradientTape() as tape:
-            preds = self(X)
-            loss = tf.reduce_mean(
-                tf.keras.losses.binary_crossentropy(y, preds)
-            )
-        gradients = tape.gradient(loss, self.trainable_variables)
-        self.optimizer.apply_gradients(
-            zip(gradients, self.trainable_variables)
+    def set_task(self, item_dataset):
+        self.task = tfrs.tasks.Retrieval(
+            metrics=tfrs.metrics.FactorizedTopK(
+                candidates=item_dataset.batch(128).map(self.item_model),
+            ),
         )
-        return {"loss": loss}
+
+    @tf.function
+    def call(self, inputs):
+        user_ids, item_ids = inputs
+        return self.user_model(user_ids), self.item_model(item_ids)
+
+    @tf.function
+    def compute_loss(self, inputs, training=False):
+        x, y, sample_weights = tf.keras.utils.unpack_x_y_sample_weight(inputs)
+        user_embeddings, item_embeddings = self(x)
+        return self.task(user_embeddings, item_embeddings, sample_weights)
+
+
+class RankingMF(RetrievalMF):
+    def __init__(self, unique_user_ids, unique_item_ids, **kwargs):
+        """Implimentation of:
+        He, X. et. al. 2017. Neural Collaborative Filtering.
+        WWW '17: Pages 173–182 https://doi.org/10.1145/3038912.3052569
+        """
+        super().__init__(unique_user_ids, unique_item_ids)
+        self.rank = tf.keras.Sequential(
+            [
+                tf.keras.layers.Dense(32, activation="relu"),
+                tf.keras.layers.Dense(16, activation="relu"),
+                tf.keras.layers.Dense(1),
+            ]
+        )
+        self.set_task()
+
+    def set_task(self):
+        self.task = tfrs.tasks.Ranking(
+            loss=tf.keras.losses.MeanSquaredError(),
+            metrics=[tf.keras.metrics.RootMeanSquaredError()],
+        )
+
+    @tf.function
+    def compute_loss(self, inputs, training=False):
+        x, y, sample_weights = tf.keras.utils.unpack_x_y_sample_weight(inputs)
+        predictions = self.rank(tf.concat([*self(x)], axis=1))
+        return self.task(labels=y, predictions=predictions)
+
+
+class LogisticRetrieval(tfrs.tasks.Retrieval):
+    def __init__(
+        self,
+        loss=None,
+        metrics=None,
+        temperature=None,
+        num_hard_negatives=None,
+        name="LogisticRetrieval",
+    ):
+        super().__init__(loss, metrics, temperature, num_hard_negatives, name)
+
+        self.__loss = tf.keras.losses.CategoricalCrossentropy(
+            from_logits=False, reduction=tf.keras.losses.Reduction.SUM
+        )
+
+    def _loss(self, y_true, y_pred, sample_weight):
+        return self.__loss(
+            y_true, y_pred / (1.0 + y_pred), sample_weight=sample_weight
+        )
+
+
+class LogisticMF(RetrievalMF):
+    def __init__(self, unique_user_ids, unique_item_ids, **kwargs):
+        super().__init__(unique_user_ids, unique_item_ids, **kwargs)
+
+    def set_task(self, item_dataset):
+        self.task = LogisticRetrieval(
+            metrics=tfrs.metrics.FactorizedTopK(
+                candidates=item_dataset.batch(128).map(self.item_model),
+            ),
+        )
